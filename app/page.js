@@ -32,13 +32,15 @@ export default function Home() {
       const data = await response.json();
 
       if (response.ok) {
-        // Store login info
-        if (rememberMe) {
-          localStorage.setItem('username', username);
-          localStorage.setItem('code', code);
+        // Store login info (client-side only)
+        if (typeof window !== 'undefined') {
+          if (rememberMe) {
+            localStorage.setItem('username', username);
+            localStorage.setItem('code', code);
+          }
+          sessionStorage.setItem('loggedIn', 'true');
+          sessionStorage.setItem('username', username);
         }
-        sessionStorage.setItem('loggedIn', 'true');
-        sessionStorage.setItem('username', username);
         
         // Redirect to chat
         router.push('/chat');
@@ -54,11 +56,13 @@ export default function Home() {
 
   // Load saved credentials on mount
   useEffect(() => {
-    const savedUsername = localStorage.getItem('username');
-    const savedCode = localStorage.getItem('code');
-    if (savedUsername) setUsername(savedUsername);
-    if (savedCode) setCode(savedCode);
-    if (savedUsername && savedCode) setRememberMe(true);
+    if (typeof window !== 'undefined') {
+      const savedUsername = localStorage.getItem('username');
+      const savedCode = localStorage.getItem('code');
+      if (savedUsername) setUsername(savedUsername);
+      if (savedCode) setCode(savedCode);
+      if (savedUsername && savedCode) setRememberMe(true);
+    }
   }, []);
 
   return (
