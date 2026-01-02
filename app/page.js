@@ -53,7 +53,7 @@ export default function Home() {
   };
 
   // Load saved credentials on mount
-  useState(() => {
+  useEffect(() => {
     const savedUsername = localStorage.getItem('username');
     const savedCode = localStorage.getItem('code');
     if (savedUsername) setUsername(savedUsername);
