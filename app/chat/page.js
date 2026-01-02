@@ -1,226 +1,260 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function Home() {
+export default function ChatRoom() {
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [onlineUsers, setOnlineUsers] = useState([]);
   const [username, setUsername] = useState('');
-  const [code, setCode] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef(null);
   const router = useRouter();
 
-  const handleLogin = async (e) => {
+  useEffect(() => {
+    // Only access sessionStorage on the client side
+    if (typeof window === 'undefined') return;
+    
+    const loggedIn = sessionStorage.getItem('loggedIn');
+    const user = sessionStorage.getItem('username');
+    
+    if (!loggedIn || !user) {
+      router.push('/');
+      return;
+    }
+    
+    setUsername(user);
+    fetchMessages();
+    fetchOnlineUsers();
+
+    const interval = setInterval(() => {
+      fetchMessages();
+      fetchOnlineUsers();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [router]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const fetchMessages = async () => {
+    try {
+      const response = await fetch('/api/messages');
+      const data = await response.json();
+      setMessages(data.messages || []);
+    } catch (err) {
+      console.error('Failed to fetch messages:', err);
+    }
+  };
+
+  const fetchOnlineUsers = async () => {
+    try {
+      const response = await fetch('/api/online-users');
+      const data = await response.json();
+      setOnlineUsers(data.users || []);
+    } catch (err) {
+      console.error('Failed to fetch online users:', err);
+    }
+  };
+
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
+    if (!newMessage.trim()) return;
 
     try {
-      const response = await fetch('/api/login', {
+      const response = await fetch('/api/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           username,
-          code,
-          rememberMe,
+          message: newMessage,
         }),
       });
 
-      const data = await response.json();
-
       if (response.ok) {
-        // Store login info
-        if (rememberMe) {
-          localStorage.setItem('username', username);
-          localStorage.setItem('code', code);
-        }
-        sessionStorage.setItem('loggedIn', 'true');
-        sessionStorage.setItem('username', username);
-        
-        // Redirect to chat
-        router.push('/chat');
-      } else {
-        setError(data.error || 'Login failed');
+        setNewMessage('');
+        fetchMessages();
       }
     } catch (err) {
-      setError('Connection error. Please try again.');
-    } finally {
-      setLoading(false);
+      console.error('Failed to send message:', err);
     }
   };
 
-  // Load saved credentials on mount
-  useState(() => {
-    const savedUsername = localStorage.getItem('username');
-    const savedCode = localStorage.getItem('code');
-    if (savedUsername) setUsername(savedUsername);
-    if (savedCode) setCode(savedCode);
-    if (savedUsername && savedCode) setRememberMe(true);
-  }, []);
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username }),
+      });
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+    
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('loggedIn');
+      sessionStorage.removeItem('username');
+    }
+    router.push('/');
+  };
 
   return (
     <div style={{
-      minHeight: '100vh',
       display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      fontFamily: 'system-ui, -apple-system, sans-serif'
+      height: '100vh',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      background: '#f5f5f5'
     }}>
       <div style={{
-        background: 'white',
-        padding: '2rem',
-        borderRadius: '12px',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-        width: '100%',
-        maxWidth: '400px',
+        width: '250px',
+        background: '#2c2f33',
+        color: 'white',
+        padding: '1rem',
+        display: 'flex',
+        flexDirection: 'column'
       }}>
-        <h1 style={{
-          fontSize: '2rem',
-          fontWeight: 'bold',
-          textAlign: 'center',
-          marginBottom: '0.5rem',
-          color: '#333'
+        <h2 style={{
+          fontSize: '1.2rem',
+          marginBottom: '1rem',
+          paddingBottom: '0.5rem',
+          borderBottom: '2px solid #444'
+        }}>
+          Online Users ({onlineUsers.length})
+        </h2>
+        
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {onlineUsers.map((user, index) => (
+            <div key={index} style={{
+              padding: '0.5rem',
+              marginBottom: '0.5rem',
+              background: user === username ? '#667eea' : '#23272a',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              <div style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: '#43b581',
+                marginRight: '0.5rem'
+              }}></div>
+              {user} {user === username && '(You)'}
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={handleLogout}
+          style={{
+            marginTop: '1rem',
+            padding: '0.75rem',
+            background: '#ed4245',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontWeight: '600'
+          }}
+        >
+          Logout
+        </button>
+      </div>
+
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'white'
+      }}>
+        <div style={{
+          padding: '1rem',
+          background: '#667eea',
+          color: 'white',
+          fontSize: '1.5rem',
+          fontWeight: 'bold'
         }}>
           Chat Room
-        </h1>
-        <p style={{
-          textAlign: 'center',
-          color: '#666',
-          marginBottom: '2rem',
-          fontSize: '0.9rem'
+        </div>
+
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '1rem'
         }}>
-          Enter your credentials to join
-        </p>
-
-        <form onSubmit={handleLogin}>
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '0.5rem',
-              color: '#333',
-              fontWeight: '500'
-            }}>
-              Username
-            </label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                border: '2px solid #e0e0e0',
-                borderRadius: '8px',
-                fontSize: '1rem',
-                outline: 'none',
-                transition: 'border-color 0.2s',
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#667eea'}
-              onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
-              placeholder="Enter your username"
-            />
-          </div>
-
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '0.5rem',
-              color: '#333',
-              fontWeight: '500'
-            }}>
-              Access Code
-            </label>
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              required
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                border: '2px solid #e0e0e0',
-                borderRadius: '8px',
-                fontSize: '1rem',
-                outline: 'none',
-                transition: 'border-color 0.2s',
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#667eea'}
-              onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
-              placeholder="Enter your access code"
-            />
-            <p style={{
-              fontSize: '0.8rem',
-              color: '#666',
-              marginTop: '0.25rem'
-            }}>
-              Get your code from the Discord bot
-            </p>
-          </div>
-
-          <div style={{
-            marginBottom: '1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-          }}>
-            <input
-              type="checkbox"
-              id="remember"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              style={{
-                width: '18px',
-                height: '18px',
-                marginRight: '0.5rem',
-                cursor: 'pointer'
-              }}
-            />
-            <label htmlFor="remember" style={{
-              color: '#333',
-              fontSize: '0.9rem',
-              cursor: 'pointer'
-            }}>
-              Remember me
-            </label>
-          </div>
-
-          {error && (
-            <div style={{
-              background: '#fee',
-              color: '#c33',
-              padding: '0.75rem',
-              borderRadius: '8px',
+          {messages.map((msg, index) => (
+            <div key={index} style={{
               marginBottom: '1rem',
-              fontSize: '0.9rem',
-              textAlign: 'center'
+              padding: '0.75rem',
+              background: msg.username === username ? '#e3f2fd' : '#f5f5f5',
+              borderRadius: '8px',
+              borderLeft: msg.username === username ? '4px solid #667eea' : '4px solid #999'
             }}>
-              {error}
+              <div style={{
+                fontWeight: 'bold',
+                color: '#667eea',
+                marginBottom: '0.25rem'
+              }}>
+                {msg.username}
+              </div>
+              <div style={{ color: '#333' }}>
+                {msg.message}
+              </div>
+              <div style={{
+                fontSize: '0.75rem',
+                color: '#999',
+                marginTop: '0.25rem'
+              }}>
+                {new Date(msg.timestamp).toLocaleTimeString()}
+              </div>
             </div>
-          )}
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
 
+        <form onSubmit={handleSendMessage} style={{
+          padding: '1rem',
+          borderTop: '1px solid #ddd',
+          display: 'flex',
+          gap: '0.5rem'
+        }}>
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Type a message..."
+            style={{
+              flex: 1,
+              padding: '0.75rem',
+              border: '2px solid #e0e0e0',
+              borderRadius: '8px',
+              fontSize: '1rem',
+              outline: 'none'
+            }}
+          />
           <button
             type="submit"
-            disabled={loading}
             style={{
-              width: '100%',
-              padding: '0.75rem',
-              background: loading ? '#999' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              padding: '0.75rem 2rem',
+              background: '#667eea',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
-              fontSize: '1rem',
-              fontWeight: '600',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              transition: 'transform 0.2s',
+              cursor: 'pointer',
+              fontWeight: '600'
             }}
-            onMouseEnter={(e) => !loading && (e.target.style.transform = 'translateY(-2px)')}
-            onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
           >
-            {loading ? 'Logging in...' : 'Login'}
+            Send
           </button>
         </form>
       </div>
